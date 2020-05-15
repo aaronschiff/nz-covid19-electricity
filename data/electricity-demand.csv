@@ -1,10 +1,10 @@
 Grid demand trends
 
 From www.emi.ea.govt.nz provided by the Electricity Authority (New Zealand)
-Run at: 20200507182754
+Run at: 20200514204144
 
 Parameters
-Date range,01 Jan 2010 - 06 May 2020
+Date range,01 Jan 2010 - 13 May 2020
 Region type,New Zealand
 Time scale,Day
 Show,Final pricing demand
@@ -3788,4 +3788,11 @@ Period start,Period end,Trading period,Region ID,Region,Demand (GWh)
 03/05/2020,03/05/2020,N/A,NZ,New Zealand,95.752
 04/05/2020,04/05/2020,N/A,NZ,New Zealand,104.622
 05/05/2020,05/05/2020,N/A,NZ,New Zealand,112.783
-06/05/2020,06/05/2020,N/A,NZ,New Zealand,113.203
+06/05/2020,06/05/2020,N/A,NZ,New Zealand,113.134
+07/05/2020,07/05/2020,N/A,NZ,New Zealand,111.784
+08/05/2020,08/05/2020,N/A,NZ,New Zealand,107.435
+09/05/2020,09/05/2020,N/A,NZ,New Zealand,100.061
+10/05/2020,10/05/2020,N/A,NZ,New Zealand,97.862
+11/05/2020,11/05/2020,N/A,NZ,New Zealand,107.535
+12/05/2020,12/05/2020,N/A,NZ,New Zealand,109.927
+13/05/2020,13/05/2020,N/A,NZ,New Zealand,111.253

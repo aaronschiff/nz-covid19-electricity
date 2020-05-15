@@ -1,4 +1,4 @@
-# Projections of NZ electricity demand for 2020
+# Weekly projections of NZ electricity demand for 2020
 
 # *****************************************************************************
 # Setup ----
@@ -12,6 +12,10 @@ library(here)
 library(janitor)
 library(sandwich)
 library(lmtest)
+library(broom)
+library(forecast)
+library(tsibble)
+library(fable)
 
 conflict_prefer("filter", "dplyr")
 conflict_prefer("lag", "dplyr")
@@ -20,170 +24,21 @@ conflict_prefer("lag", "dplyr")
 
 
 # *****************************************************************************
-# Utility functions ----
-
-# Parse horrible NIWA Cliflo data files
-parse_niwa_data <- function(f) {
-  # Load raw data
-  d_raw <- read_csv(f, 
-                    col_names = paste0("x", 1:12), 
-                    col_types = "cccccccccccc", 
-                    skip = 7)
-  
-  # Clean up raw data a bit
-  d_clean <- d_raw %>%
-    mutate(is_header_row = str_detect(x1, ": Daily") & is.na(x2)) %>%
-    mutate(dataset = ifelse(is_header_row, x1, NA_character_)) %>%
-    fill(dataset, .direction = "down") %>%
-    select(-is_header_row)
-  
-  # Sunshine data
-  d_sunshine <- d_clean %>% filter(dataset == "Sunshine: Daily") %>%
-    filter(!is.na(x2)) %>%
-    select(-x5:-dataset)
-  names(d_sunshine) <- as.character(d_sunshine[1, ])
-  d_sunshine <- d_sunshine %>%
-    clean_names() %>%
-    mutate(amount_hrs = as.numeric(amount_hrs), 
-           period_hrs = as.numeric(period_hrs)) %>%
-    filter(row_number() != 1) %>%
-    separate(col = date_nzst, into = c("date", "junk"), sep = "\\:", convert = TRUE) %>%
-    select(-junk) %>%
-    mutate(date = ymd(date)) %>%
-    mutate(dataset = "sunshine")
-  
-  # Rain data
-  d_rain <- d_clean %>% filter(dataset == "Rain: Daily") %>%
-    filter(!is.na(x2)) %>%
-    select(-x9:-dataset)
-  names(d_rain) <- as.character(d_rain[1, ])
-  d_rain <- d_rain %>%
-    clean_names() %>%
-    mutate(amount_mm = as.numeric(amount_mm), 
-           sof_g = as.numeric(sof_g), 
-           deficit_mm = as.numeric(deficit_mm), 
-           runoff_mm = as.numeric(runoff_mm), 
-           period_hrs = as.integer(period_hrs)) %>%
-    filter(row_number() != 1) %>%
-    separate(col = date_nzst, into = c("date", "junk"), sep = "\\:", convert = TRUE) %>%
-    select(-junk) %>%
-    mutate(date = ymd(date)) %>%
-    mutate(dataset = "rain")
-  
-  # Temperature data
-  d_temp <- d_clean %>% filter(dataset == "Max_min: Daily") %>%
-    filter(!is.na(x2)) %>%
-    select(-dataset)
-  names(d_temp) <- as.character(d_temp[1, ])
-  d_temp <- d_temp %>%
-    clean_names() %>%
-    mutate(tmax_c = as.numeric(tmax_c), 
-           period_hrs = as.integer(period_hrs), 
-           tmin_c = as.numeric(tmin_c), 
-           period_hrs_2 = as.integer(period_hrs_2), 
-           tgmin_c = as.numeric(tgmin_c), 
-           period_hrs_3 = as.integer(period_hrs_3), 
-           tmean_c = as.numeric(tmean_c), 
-           r_hmean_percent = as.numeric(r_hmean_percent), 
-           period_hrs_4 = as.integer(period_hrs_4)) %>%
-    filter(row_number() != 1) %>%
-    separate(col = date_nzst, into = c("date", "junk"), sep = "\\:", convert = TRUE) %>%
-    select(-junk) %>%
-    mutate(date = ymd(date)) %>%
-    mutate(dataset = "temp")
-  
-  # Combine
-  w <- bind_rows(
-    # Sunshine
-    d_sunshine %>% 
-      select(-period_hrs) %>%
-      pivot_longer(cols = amount_hrs,
-                   names_to = "measure", 
-                   values_to = "value"), 
-    
-    # Rain
-    d_rain %>% 
-      select(station, date, amount_mm, dataset) %>%
-      pivot_longer(cols = amount_mm, 
-                   names_to = "measure", 
-                   values_to = "value"),
-    
-    # Temperature
-    d_temp %>%
-      select(station, date, tmax_c, tmin_c, dataset) %>%
-      pivot_longer(cols = c(tmax_c, tmin_c), 
-                   names_to = "measure", 
-                   values_to = "value")
-  ) %>%
-    mutate(measure = paste(dataset, measure, sep = ".")) %>%
-    select(-dataset)
-  
-  return(w)
-}
-
-# *****************************************************************************
-
-
-# *****************************************************************************
 # Load data ----
 
-# Electricity demand - base
-dat_electricity_base <- read_csv(file = here("data/electricity-demand-base.csv"), 
-                                 skip = 10) %>%
+# Daily electricity demand
+dat_electricity <- read_csv(file = here("data/electricity-demand.csv"), 
+                            skip = 10) %>%
   clean_names() %>%
   mutate(date = dmy(period_start)) %>%
   select(-period_start, -period_end, -trading_period, -region_id) 
 
-# Weather data - base
-dat_weather_base <- bind_rows(
-  parse_niwa_data(f = here("data/weather-base-auckland.csv")), 
-  parse_niwa_data(f = here("data/weather-base-hamilton.csv")), 
-  parse_niwa_data(f = here("data/weather-base-wellington.csv")), 
-  parse_niwa_data(f = here("data/weather-base-christchurch.csv")), 
-  parse_niwa_data(f = here("data/weather-base-dunedin.csv"))
-) 
-
-# Weather concordance with electricity regions
-dat_weather_electricity_regions <- tribble(
-  ~region, ~station, 
-  "Upper North Island", "37852", 
-  "Central North Island", "26117", 
-  "Lower North Island", "3385", 
-  "Lower North Island", "3445", 
-  "Upper South Island", "4843", 
-  "Lower South Island", "15752"
-)
-
 # Public holidays
-# TODO: Get anniversary days for other provinces
+dat_public_hols <- read_csv(file = here("data/public-holidays.csv")) %>%
+  arrange(holiday, date) %>%
+  arrange(date)
 
-
-# Combined daily data in wide format for modelling, nested by region
-dat_daily <- bind_rows(
-  # Electricity
-  dat_electricity_base %>%
-    mutate(measure = "demand_g_wh") %>%
-    rename(value = demand_g_wh), 
-  
-  # Weather
-  dat_weather_base %>%
-    left_join(y = dat_weather_electricity_regions, by = "station") %>%
-    select(-station)
-) %>%
-  mutate(weekday = wday(date, week_start = 1), 
-         month = month(date), 
-         year = year(date), 
-         week = week(date)) %>%
-  mutate(quarter = ceiling(month / 3)) %>%
-  select(region, measure, date, year, month, quarter, week, weekday, value) %>%
-  arrange(region, measure, date) %>%
-  pivot_wider(names_from = measure, values_from = value) %>%
-  group_by(region) %>%
-  mutate(t = row_number()) %>%
-  ungroup() %>%
-  nest(data = -region)
-
-# Quarterly real GDP
+# Quarterly real GDP: actual and seasonally adjusted
 dat_real_gdp_actual <- read_csv(file = here("data/SNE445001_20200429_050839_57.csv"), 
                                 skip = 1) %>%
   clean_names() %>%
@@ -201,27 +56,203 @@ dat_real_gdp_seas_adj <- read_csv(file = here("data/SNE446901_20200430_084253_24
 # *****************************************************************************
 
 
-# *****************************************************************************
-# Model daily electricity demand ----
+# ***************************************************************************** 
+# Weekly electricity demand model ----
 
-daily_electricity_demand_model <- function(d) {
-  m <- lm(
-    demand_g_wh ~ 
-      factor(weekday) + 
-      t + 
-      temp.tmax_c * factor(week) + 
-      temp.tmin_c * factor(week) + 
-      sunshine.amount_hrs * factor(week) +
-      rain.amount_mm, 
-      #relevel(x = as.factor(holiday), ref = "not holiday") 
-    data = d %>% filter(year < 2020)
-  )
+generate_week_numbers <- function(d, y) {
+  if (leap_year(y)) {
+    weeks_in_year <- c(
+      rep(1:8, each = 7), 
+      rep(9, 8), 
+      rep(10:51, each = 7), 
+      rep(52, 8)
+    )[1:nrow(d)]
+  } else {
+    weeks_in_year <- c(
+      rep(1:51, each = 7), 
+      rep(52, 8)
+    )[1:nrow(d)]  
+  }
   
-  return(m)
+  return(as.integer(weeks_in_year))
 }
 
-models_daily <- dat_daily %>%
-  mutate(m_daily = map(.x = data, .f = daily_electricity_demand_model))
+# Create weekly dataset
+dat_weekly <- dat_electricity %>%
+  select(-region) %>%
+  mutate(year = as.integer(year(date))) %>%
+  nest(data = c(date, demand_g_wh)) %>%
+  mutate(week_in_year = map2(.x = data, .y = year, .f = generate_week_numbers)) %>%
+  unnest(c(data, week_in_year)) %>%
+  left_join(y = dat_public_hols, by = "date") %>%
+  mutate(holiday = ifelse(!is.na(holiday), 1L, 0L)) %>%
+  group_by(year, week_in_year) %>%
+  summarise(gwh = sum(demand_g_wh), 
+            week_start_date = min(date), 
+            holiday_days = sum(holiday), 
+            n_days_in_week = n()) %>%
+  ungroup() %>%
+  filter(n_days_in_week >= 7) %>%
+  mutate(t = row_number(), 
+         month = as.integer(month(week_start_date)), 
+         tb = ifelse(year >= 2016, 1L, 0L), 
+         leap_week = ifelse((week_in_year == 9) & leap_year(year), 1, 0), 
+         week_start_day = wday(x = week_start_date, week_start = 1)) %>%
+  mutate(week_in_year = factor(week_in_year), 
+         month = factor(month), 
+         tb = factor(tb), 
+         leap_week = factor(leap_week), 
+         week_start_day = factor(week_start_day)) %>%
+  as_tsibble(index = t)
+
+# Plot weekly electricity use pre March 2020
+dat_weekly_chart <- dat_weekly %>%
+  filter(week_start_date < ymd("2020-03-01")) %>%
+  ggplot(mapping = aes(x = week_start_date, 
+                       y = gwh)) + 
+  geom_line(size = 0.25) + 
+  geom_smooth(se = FALSE, method = "gam", size = 0.5) + 
+  scale_x_date(breaks = date_breaks("1 year"), 
+               labels = date_format("%Y"), 
+               expand = expansion(0.02, 0)) + 
+  scale_y_continuous(breaks = seq(0, 1000, 50))
+
+output_chart(chart = dat_weekly_chart, 
+             orientation = "wide", 
+             path = here("outputs"), 
+             xlab = "Week starting date", 
+             ylab = "", 
+             ggtitle = "Weekly electricity demand (GWh)", 
+             plot.margin = margin(4, 4, 4, 4, "pt"), 
+             axis.title.y = element_blank())
+
+
+# Estimate weekly ARMA model using pre-March 2020 data
+m_weekly <- dat_weekly %>%
+  filter(week_start_date < ymd("2020-03-01")) %>%
+  model(ar = ARIMA(
+    formula = gwh ~ 
+      tb * t + 
+      week_in_year + 
+      holiday_days + 
+      leap_week
+    # week_start_day
+    # pdq(p = 2, d = 0, q = 0) +
+    # PDQ(P = 0, D = 0, Q = 0)
+  ))
+
+report(m_weekly)
+accuracy(m_weekly)
+
+# Plot fitted vs actual
+m_weekly_fit_chart <- m_weekly %>%
+  augment() %>%
+  as_tibble() %>%
+  left_join(y = dat_weekly %>% select(week_start_date, t), 
+            by = "t") %>%
+  select(week_start_date, gwh, .fitted) %>%
+  mutate(pe = gwh / .fitted - 1) %>%
+  mutate(sign = ifelse(pe > 0, "pos", "neg")) %>%
+  ggplot(mapping = aes(x = week_start_date, 
+                       y = pe, 
+                       fill = sign)) + 
+  geom_col(width = 5, 
+           size = 0) + 
+  geom_hline(yintercept = 0, size = 0.25, colour = grey(0.25)) + 
+  scale_x_date(breaks = date_breaks("1 year"), 
+               labels = date_format("%Y"), 
+               expand = expansion(0.02, 0)) +
+  scale_y_continuous(labels = percent_format(accuracy = 1), 
+                     breaks = seq(-0.07, 0.07, 0.01), 
+                     limits = c(-0.07, 0.07)) + 
+  scale_fill_brewer(palette = "Set2", guide = "none")
+
+output_chart(chart = m_weekly_fit_chart, 
+             path = here("outputs"), 
+             orientation = "wide", 
+             xlab = "Week starting date", 
+             ylab = "", 
+             ggtitle = "Actual vs predicted weekly electricity demand (%)", 
+             plot.margin = margin(4, 4, 4, 4, "pt"), 
+             axis.title.y = element_blank())
+
+# Predictions for 2020 with confidence intervals
+p2020 <- m_weekly %>%
+  fabletools::forecast(new_data = dat_weekly %>% 
+                         filter(year(week_start_date) == 2020) %>%
+                         select(-gwh))
+
+p2020_ci <- rbind(
+  p2020 %>% mutate(interval = hilo(x = .distribution, level = 60)) %>% as_tibble(), 
+  p2020 %>% mutate(interval = hilo(x = .distribution, level = 80)) %>% as_tibble(), 
+  p2020 %>% mutate(interval = hilo(x = .distribution, level = 95)) %>% as_tibble()
+) %>%
+  unnest(interval) %>%
+  select(t, week_start_date, predicted = gwh, .lower, .upper, .level) %>%
+  left_join(y = dat_weekly %>% select(t, actual = gwh), 
+            by = "t") %>%
+  mutate(ap = actual/predicted - 1, 
+         ap.lower = actual/.lower - 1, 
+         ap.upper = actual/.upper - 1)
+
+predictions_chart <- p2020_ci %>%
+  ggplot(mapping = aes(x = week_start_date, 
+                       y = ap, 
+                       ymin = ap.lower, 
+                       ymax = ap.upper, 
+                       colour = fct_rev(factor(.level)))) + 
+  geom_vline(xintercept = ymd("2020-03-26"), colour = "red") + 
+  geom_vline(xintercept = ymd("2020-04-28"), colour = "orange") + 
+  geom_hline(yintercept = 0, colour = "black") + 
+  geom_linerange(size = 6, data = p2020_ci %>% filter(.level == 95)) + 
+  geom_linerange(size = 6, data = p2020_ci %>% filter(.level == 80)) + 
+  geom_linerange(size = 6, data = p2020_ci %>% filter(.level == 60)) + 
+  annotate(geom = "text", 
+           x = ymd("2020-03-27"), 
+           y = 0.11, 
+           label = "Level 4", 
+           colour = "red", 
+           hjust = 0, 
+           family = "Fira Sans", 
+           fontface = "bold", 
+           size = 3) +
+  annotate(geom = "text", 
+           x = ymd("2020-04-29"), 
+           y = 0.11, 
+           label = "Level 3", 
+           colour = "orange", 
+           hjust = 0, 
+           family = "Fira Sans", 
+           fontface = "bold", 
+           size = 3) +
+  scale_colour_manual(values = c("60" = "#3182bd", 
+                                 "80" = "#9ecae1", 
+                                 "95" = "#deebf7"), 
+                      labels = c("60%", "80%", "95%"), 
+                      name = "Confidence level") + 
+  scale_y_continuous(labels = percent_format(accuracy = 1), 
+                     breaks = seq(-0.20, 0.12, 0.02), 
+                     limits = c(-0.20, 0.12), 
+                     expand = expansion(0, 0)) + 
+  scale_x_date(breaks = p2020_ci$week_start_date, 
+               limits = c(ymd("2020-01-01", NA)), 
+               labels = function(x) {
+                 lx <- str_wrap(string = format(x = x, format = "%d %b"), 
+                                width = 3)
+                 return(lx)
+               })
+
+output_chart(chart = predictions_chart, 
+             path = here("outputs"), 
+             orientation = "wide", 
+             xlab = "Week start date", 
+             ylab = "", 
+             ggtitle = "Actual vs predicted weekly electricity demand in 2020 (%)", 
+             legend_position = "top", 
+             plot.margin = margin(4, 4, 4, 4, "pt"), 
+             axis.title.y = element_blank())
+
+
 
 # *****************************************************************************
 
@@ -247,16 +278,17 @@ dat_quarterly <- dat_electricity_base %>%
   mutate(log_gdp_seas_adj = log(gdp_seas_adj)) %>%
   mutate(d_log_gdp_seas_adj = log_gdp_seas_adj - lag(log_gdp_seas_adj, 4))
 
-m_actual <- lm(gdp_actual ~ gwh + t * factor(quarter) , 
+m_actual <- lm(gdp_actual ~  t * factor(quarter) , 
                data = dat_quarterly)
 summary(m_actual)
+tsdisplay(m_actual$residuals)
 coeftest(x = m_actual, vcov = vcovHAC)
 
 m_seas_adj <- lm(gdp_seas_adj ~ gwh + t * factor(quarter) , 
                  data = dat_quarterly)
 summary(m_seas_adj)
+tsdisplay(m_seas_adj$residuals)
 coeftest(x = m_seas_adj, vcov = vcovHAC)
 
+# *****************************************************************************
 
-
-# ***************************************************************************** 
