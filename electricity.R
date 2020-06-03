@@ -1,5 +1,7 @@
 # Weekly projections of NZ electricity demand for 2020
 
+# Data source: https://www.emi.ea.govt.nz/r/sepyr
+
 # *****************************************************************************
 # Setup ----
 
@@ -33,25 +35,10 @@ dat_electricity <- read_csv(file = here("data/electricity-demand.csv"),
   mutate(date = dmy(period_start)) %>%
   select(-period_start, -period_end, -trading_period, -region_id) 
 
-# Public holidays
+# National public holidays
 dat_public_hols <- read_csv(file = here("data/public-holidays.csv")) %>%
   arrange(holiday, date) %>%
   arrange(date)
-
-# Quarterly real GDP: actual and seasonally adjusted
-dat_real_gdp_actual <- read_csv(file = here("data/SNE445001_20200429_050839_57.csv"), 
-                                skip = 1) %>%
-  clean_names() %>%
-  rename(yq = x1, gdp_actual = gross_domestic_product_production_measure) %>%
-  filter(!is.na(gdp_actual)) %>%
-  separate(col = yq, into = c("year", "quarter"), sep = "Q", convert = TRUE)
-
-dat_real_gdp_seas_adj <- read_csv(file = here("data/SNE446901_20200430_084253_24.csv"), 
-                                  skip = 1) %>%
-  clean_names() %>%
-  rename(yq = x1, gdp_seas_adj = gross_domestic_product_production_measure) %>%
-  filter(!is.na(gdp_seas_adj)) %>%
-  separate(col = yq, into = c("year", "quarter"), sep = "Q", convert = TRUE)
 
 # *****************************************************************************
 
@@ -59,6 +46,8 @@ dat_real_gdp_seas_adj <- read_csv(file = here("data/SNE446901_20200430_084253_24
 # ***************************************************************************** 
 # Weekly electricity demand model ----
 
+# Generate week-of-year numbers from 1 to 52, with 8-day weeks in week 52 and
+# in week 9 if the year is a leap year
 generate_week_numbers <- function(d, y) {
   if (leap_year(y)) {
     weeks_in_year <- c(
@@ -77,7 +66,7 @@ generate_week_numbers <- function(d, y) {
   return(as.integer(weeks_in_year))
 }
 
-# Create weekly dataset
+# Create weekly dataset from daily electricity data
 dat_weekly <- dat_electricity %>%
   select(-region) %>%
   mutate(year = as.integer(year(date))) %>%
@@ -105,7 +94,7 @@ dat_weekly <- dat_electricity %>%
          week_start_day = factor(week_start_day)) %>%
   as_tsibble(index = t)
 
-# Plot weekly electricity use pre March 2020
+# Plot weekly electricity demand pre March 2020
 dat_weekly_chart <- dat_weekly %>%
   filter(week_start_date < ymd("2020-03-01")) %>%
   ggplot(mapping = aes(x = week_start_date, 
@@ -136,9 +125,6 @@ m_weekly <- dat_weekly %>%
       week_in_year + 
       holiday_days + 
       leap_week
-    # week_start_day
-    # pdq(p = 2, d = 0, q = 0) +
-    # PDQ(P = 0, D = 0, Q = 0)
   ))
 
 report(m_weekly)
@@ -202,7 +188,8 @@ predictions_chart <- p2020_ci %>%
                        ymax = ap.upper, 
                        colour = fct_rev(factor(.level)))) + 
   geom_vline(xintercept = ymd("2020-03-26"), colour = "red") + 
-  geom_vline(xintercept = ymd("2020-04-28"), colour = "orange") + 
+  geom_vline(xintercept = ymd("2020-04-28"), colour = "darkorange") + 
+  geom_vline(xintercept = ymd("2020-05-14"), colour = "darkgoldenrod1") + 
   geom_hline(yintercept = 0, colour = "black") + 
   geom_linerange(size = 6, data = p2020_ci %>% filter(.level == 95)) + 
   geom_linerange(size = 6, data = p2020_ci %>% filter(.level == 80)) + 
@@ -220,7 +207,16 @@ predictions_chart <- p2020_ci %>%
            x = ymd("2020-04-29"), 
            y = 0.11, 
            label = "Level 3", 
-           colour = "orange", 
+           colour = "darkorange", 
+           hjust = 0, 
+           family = "Fira Sans", 
+           fontface = "bold", 
+           size = 3) +
+  annotate(geom = "text", 
+           x = ymd("2020-05-15"), 
+           y = 0.11, 
+           label = "Level 2", 
+           colour = "darkgoldenrod1", 
            hjust = 0, 
            family = "Fira Sans", 
            fontface = "bold", 
@@ -252,43 +248,4 @@ output_chart(chart = predictions_chart,
              plot.margin = margin(4, 4, 4, 4, "pt"), 
              axis.title.y = element_blank())
 
-
-
 # *****************************************************************************
-
-
-# *****************************************************************************
-# Model GDP vs electricity demand ----
-
-dat_quarterly <- dat_electricity_base %>%
-  mutate(year = year(date), quarter = ceiling(month(date) / 3)) %>%
-  group_by(year, quarter) %>%
-  summarise(gwh = sum(demand_g_wh)) %>%
-  ungroup() %>%
-  left_join(y = dat_real_gdp_actual, by = c("year", "quarter")) %>%
-  filter(!is.na(gdp_actual)) %>%
-  arrange(year, quarter) %>%
-  mutate(t = row_number()) %>%
-  mutate(log_gdp_actual = log(gdp_actual), 
-         log_gwh = log(gwh)) %>%
-  mutate(d_log_gdp_actual = log_gdp_actual - lag(log_gdp_actual, 4), 
-         d_log_gwh = log_gwh - lag(log_gwh, 4)) %>%
-  left_join(y = dat_real_gdp_seas_adj, by = c("year", "quarter")) %>%
-  filter(!is.na(gdp_seas_adj)) %>%
-  mutate(log_gdp_seas_adj = log(gdp_seas_adj)) %>%
-  mutate(d_log_gdp_seas_adj = log_gdp_seas_adj - lag(log_gdp_seas_adj, 4))
-
-m_actual <- lm(gdp_actual ~  t * factor(quarter) , 
-               data = dat_quarterly)
-summary(m_actual)
-tsdisplay(m_actual$residuals)
-coeftest(x = m_actual, vcov = vcovHAC)
-
-m_seas_adj <- lm(gdp_seas_adj ~ gwh + t * factor(quarter) , 
-                 data = dat_quarterly)
-summary(m_seas_adj)
-tsdisplay(m_seas_adj$residuals)
-coeftest(x = m_seas_adj, vcov = vcovHAC)
-
-# *****************************************************************************
-
