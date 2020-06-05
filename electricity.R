@@ -107,11 +107,12 @@ dat_weekly_chart <- dat_weekly %>%
   scale_y_continuous(breaks = seq(0, 1000, 50))
 
 output_chart(chart = dat_weekly_chart, 
+             base_size = 10, 
              orientation = "wide", 
              path = here("outputs"), 
              xlab = "Week starting date", 
              ylab = "", 
-             ggtitle = "Weekly electricity demand (GWh)", 
+             ggtitle = "National weekly electricity consumption (GWh)", 
              plot.margin = margin(4, 4, 4, 4, "pt"), 
              axis.title.y = element_blank())
 
@@ -155,6 +156,7 @@ m_weekly_fit_chart <- m_weekly %>%
 
 output_chart(chart = m_weekly_fit_chart, 
              path = here("outputs"), 
+             base_size = 10, 
              orientation = "wide", 
              xlab = "Week starting date", 
              ylab = "", 
@@ -187,40 +189,40 @@ predictions_chart <- p2020_ci %>%
                        ymin = ap.lower, 
                        ymax = ap.upper, 
                        colour = fct_rev(factor(.level)))) + 
-  geom_vline(xintercept = ymd("2020-03-26"), colour = "red") + 
-  geom_vline(xintercept = ymd("2020-04-28"), colour = "darkorange") + 
-  geom_vline(xintercept = ymd("2020-05-14"), colour = "darkgoldenrod1") + 
-  geom_hline(yintercept = 0, colour = "black") + 
+  geom_vline(xintercept = ymd("2020-03-26"), colour = "red", size = 1) + 
+  geom_vline(xintercept = ymd("2020-04-28"), colour = "darkorange", size = 1) + 
+  geom_vline(xintercept = ymd("2020-05-14"), colour = "darkgoldenrod1", size = 1) + 
+  geom_hline(yintercept = 0, colour = "black", size = 1) + 
   geom_linerange(size = 6, data = p2020_ci %>% filter(.level == 95)) + 
   geom_linerange(size = 6, data = p2020_ci %>% filter(.level == 80)) + 
   geom_linerange(size = 6, data = p2020_ci %>% filter(.level == 60)) + 
   annotate(geom = "text", 
            x = ymd("2020-03-27"), 
            y = 0.11, 
-           label = "Level 4", 
+           label = "L4", 
            colour = "red", 
            hjust = 0, 
            family = "Fira Sans", 
            fontface = "bold", 
-           size = 3) +
+           size = 4) +
   annotate(geom = "text", 
            x = ymd("2020-04-29"), 
            y = 0.11, 
-           label = "Level 3", 
+           label = "L3", 
            colour = "darkorange", 
            hjust = 0, 
            family = "Fira Sans", 
            fontface = "bold", 
-           size = 3) +
+           size = 4) +
   annotate(geom = "text", 
            x = ymd("2020-05-15"), 
            y = 0.11, 
-           label = "Level 2", 
+           label = "L2", 
            colour = "darkgoldenrod1", 
            hjust = 0, 
            family = "Fira Sans", 
            fontface = "bold", 
-           size = 3) +
+           size = 4) +
   scale_colour_manual(values = c("60" = "#3182bd", 
                                  "80" = "#9ecae1", 
                                  "95" = "#deebf7"), 
@@ -240,6 +242,7 @@ predictions_chart <- p2020_ci %>%
 
 output_chart(chart = predictions_chart, 
              path = here("outputs"), 
+             base_size = 10, 
              orientation = "wide", 
              xlab = "Week start date", 
              ylab = "", 
