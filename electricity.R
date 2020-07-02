@@ -170,13 +170,29 @@ p2020 <- m_weekly %>%
                          filter(year(week_start_date) == 2020) %>%
                          select(-gwh))
 
-p2020_ci <- rbind(
-  p2020 %>% mutate(interval = hilo(x = .distribution, level = 60)) %>% as_tibble(), 
-  p2020 %>% mutate(interval = hilo(x = .distribution, level = 80)) %>% as_tibble(), 
-  p2020 %>% mutate(interval = hilo(x = .distribution, level = 95)) %>% as_tibble()
+p2020_ci <- bind_rows(
+  p2020 %>% 
+    hilo(level = 60) %>%
+    unpack_hilo(cols = `60%`) %>%
+    as_tibble() %>%
+    rename(.lower = `60%_lower`, .upper = `60%_upper`) %>%
+    mutate(.level = "60") %>%
+    select(.model, t, predicted = .mean, year, week_in_year, week_start_date, .lower, .upper, .level), 
+  p2020 %>% 
+    hilo(level = 80) %>%
+    unpack_hilo(cols = `80%`) %>%
+    as_tibble() %>%
+    rename(.lower = `80%_lower`, .upper = `80%_upper`) %>%
+    mutate(.level = "80") %>%
+    select(.model, t, predicted = .mean, year, week_in_year, week_start_date, .lower, .upper, .level), 
+  p2020 %>% 
+    hilo(level = 95) %>%
+    unpack_hilo(cols = `95%`) %>%
+    as_tibble() %>%
+    rename(.lower = `95%_lower`, .upper = `95%_upper`) %>%
+    mutate(.level = "95") %>%
+    select(.model, t, predicted = .mean, year, week_in_year, week_start_date, .lower, .upper, .level)
 ) %>%
-  unnest(interval) %>%
-  select(t, week_start_date, predicted = gwh, .lower, .upper, .level) %>%
   left_join(y = dat_weekly %>% select(t, actual = gwh), 
             by = "t") %>%
   mutate(ap = actual/predicted - 1, 
@@ -189,40 +205,50 @@ predictions_chart <- p2020_ci %>%
                        ymin = ap.lower, 
                        ymax = ap.upper, 
                        colour = fct_rev(factor(.level)))) + 
-  geom_vline(xintercept = ymd("2020-03-26"), colour = "red", size = 1) + 
-  geom_vline(xintercept = ymd("2020-04-28"), colour = "darkorange", size = 1) + 
-  geom_vline(xintercept = ymd("2020-05-14"), colour = "darkgoldenrod1", size = 1) + 
+  geom_vline(xintercept = ymd("2020-03-26"), colour = "red", size = 0.75) + 
+  geom_vline(xintercept = ymd("2020-04-28"), colour = "darkorange", size = 0.75) + 
+  geom_vline(xintercept = ymd("2020-05-14"), colour = "darkgoldenrod1", size = 0.75) + 
+  geom_vline(xintercept = ymd("2020-06-09"), colour = grey(0.6), size = 0.75) + 
   geom_hline(yintercept = 0, colour = "black", size = 1) + 
-  geom_linerange(size = 6, data = p2020_ci %>% filter(.level == 95)) + 
-  geom_linerange(size = 6, data = p2020_ci %>% filter(.level == 80)) + 
-  geom_linerange(size = 6, data = p2020_ci %>% filter(.level == 60)) + 
+  geom_linerange(size = 5, data = p2020_ci %>% filter(.level == "95")) +
+  geom_linerange(size = 5, data = p2020_ci %>% filter(.level == "80")) +
+  geom_linerange(size = 5, data = p2020_ci %>% filter(.level == "60")) + 
   annotate(geom = "text", 
-           x = ymd("2020-03-27"), 
+           x = ymd("2020-03-26") + 1, 
            y = 0.11, 
-           label = "L4", 
+           label = "Level 4", 
            colour = "red", 
            hjust = 0, 
            family = "Fira Sans", 
            fontface = "bold", 
-           size = 4) +
+           size = 3) +
   annotate(geom = "text", 
-           x = ymd("2020-04-29"), 
+           x = ymd("2020-04-28") + 1, 
            y = 0.11, 
-           label = "L3", 
+           label = "Level 3", 
            colour = "darkorange", 
            hjust = 0, 
            family = "Fira Sans", 
            fontface = "bold", 
-           size = 4) +
+           size = 3) +
   annotate(geom = "text", 
-           x = ymd("2020-05-15"), 
+           x = ymd("2020-05-14") + 1, 
            y = 0.11, 
-           label = "L2", 
+           label = "Level 2", 
            colour = "darkgoldenrod1", 
            hjust = 0, 
            family = "Fira Sans", 
            fontface = "bold", 
-           size = 4) +
+           size = 3) +
+  annotate(geom = "text", 
+           x = ymd("2020-06-09") + 1, 
+           y = 0.11, 
+           label = "Level 1", 
+           colour = grey(0.6), 
+           hjust = 0, 
+           family = "Fira Sans", 
+           fontface = "bold", 
+           size = 3) + 
   scale_colour_manual(values = c("60" = "#3182bd", 
                                  "80" = "#9ecae1", 
                                  "95" = "#deebf7"), 
@@ -234,6 +260,7 @@ predictions_chart <- p2020_ci %>%
                      expand = expansion(0, 0)) + 
   scale_x_date(breaks = p2020_ci$week_start_date, 
                limits = c(ymd("2020-01-01", NA)), 
+               expand = expansion(mult = 0.02, 0), 
                labels = function(x) {
                  lx <- str_wrap(string = format(x = x, format = "%d %b"), 
                                 width = 3)
@@ -249,6 +276,7 @@ output_chart(chart = predictions_chart,
              ggtitle = "Actual vs predicted weekly electricity demand in 2020 (%)", 
              legend_position = "top", 
              plot.margin = margin(4, 4, 4, 4, "pt"), 
-             axis.title.y = element_blank())
+             axis.title.y = element_blank(), 
+             axis.text.x = element_text(size = rel(0.8)))
 
 # *****************************************************************************

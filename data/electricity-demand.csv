@@ -1,10 +1,10 @@
 Grid demand trends
 
 From www.emi.ea.govt.nz provided by the Electricity Authority (New Zealand)
-Run at: 20200604110922
+Run at: 20200702162221
 
 Parameters
-Date range,01 Jan 2010 - 03 Jun 2020
+Date range,01 Jan 2010 - 01 Jul 2020
 Region type,New Zealand
 Time scale,Day
 Show,Final pricing demand
@@ -3816,3 +3816,32 @@ Period start,Period end,Trading period,Region ID,Region,Demand (GWh)
 31/05/2020,31/05/2020,N/A,NZ,New Zealand,106.374
 01/06/2020,01/06/2020,N/A,NZ,New Zealand,107.242
 02/06/2020,02/06/2020,N/A,NZ,New Zealand,113.254
+03/06/2020,03/06/2020,N/A,NZ,New Zealand,116.719
+04/06/2020,04/06/2020,N/A,NZ,New Zealand,115.829
+05/06/2020,05/06/2020,N/A,NZ,New Zealand,118.077
+06/06/2020,06/06/2020,N/A,NZ,New Zealand,111.715
+07/06/2020,07/06/2020,N/A,NZ,New Zealand,110.397
+08/06/2020,08/06/2020,N/A,NZ,New Zealand,121.743
+09/06/2020,09/06/2020,N/A,NZ,New Zealand,121.142
+10/06/2020,10/06/2020,N/A,NZ,New Zealand,120.720
+11/06/2020,11/06/2020,N/A,NZ,New Zealand,119.101
+12/06/2020,12/06/2020,N/A,NZ,New Zealand,118.004
+13/06/2020,13/06/2020,N/A,NZ,New Zealand,110.926
+14/06/2020,14/06/2020,N/A,NZ,New Zealand,111.707
+15/06/2020,15/06/2020,N/A,NZ,New Zealand,121.083
+16/06/2020,16/06/2020,N/A,NZ,New Zealand,116.915
+17/06/2020,17/06/2020,N/A,NZ,New Zealand,115.238
+18/06/2020,18/06/2020,N/A,NZ,New Zealand,121.844
+19/06/2020,19/06/2020,N/A,NZ,New Zealand,120.719
+20/06/2020,20/06/2020,N/A,NZ,New Zealand,110.496
+21/06/2020,21/06/2020,N/A,NZ,New Zealand,109.206
+22/06/2020,22/06/2020,N/A,NZ,New Zealand,117.812
+23/06/2020,23/06/2020,N/A,NZ,New Zealand,119.779
+24/06/2020,24/06/2020,N/A,NZ,New Zealand,122.180
+25/06/2020,25/06/2020,N/A,NZ,New Zealand,121.968
+26/06/2020,26/06/2020,N/A,NZ,New Zealand,119.218
+27/06/2020,27/06/2020,N/A,NZ,New Zealand,107.327
+28/06/2020,28/06/2020,N/A,NZ,New Zealand,106.425
+29/06/2020,29/06/2020,N/A,NZ,New Zealand,122.997
+30/06/2020,30/06/2020,N/A,NZ,New Zealand,125.090
+01/07/2020,01/07/2020,N/A,NZ,New Zealand,129.900
